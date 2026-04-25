@@ -18,7 +18,7 @@ Extract structured data from [truelancer.com](https://truelancer.com) — a glob
 
 **Compact mode** — AI-agent and MCP-friendly payloads with core fields only. Keeps response size small for LLM workflows and `descriptionMaxLength` lets you cap text length.
 
-**Strict client-side filtering** — `jobType`, `categoryId`, `countryCode`, `budgetMin/Max`, `experienceLevel` are enforced after fetch (the source API ignores them server-side, so we filter ourselves — your filters always work).
+**Strict filtering** — combine `jobType`, `categoryId`, `countryCode`, `budgetMin/Max`, `experienceLevel` to narrow results precisely. Every filter is enforced — what you ask for is what you get.
 
 **Normalized output** — ISO millisecond timestamps, structured `countryCode` + `countryName` (via `Intl.DisplayNames`), explicit `priceUnit` enum (`"project"` / `"hour"` / `"package"`), HTML entities decoded, experience level mapped to actor's input enum.
 
