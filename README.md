@@ -1,6 +1,6 @@
 # Truelancer Scraper
 
-Extract structured data from [truelancer.com](https://truelancer.com) — truelancer.com — global freelance marketplace with 2M+ freelancers. Extract job listings with budgets and skills, freelancer profiles with ratings and rates, or gig services with prices and reviews.
+Extract structured data from [truelancer.com](https://truelancer.com) — a global freelance marketplace with 2M+ freelancers. Three modes in one actor: scrape **job listings** (with budgets, skills, client info), **freelancer profiles** (with ratings, hourly rates, experience level), or **gig services** (with prices, sales, seller info).
 
 **[Truelancer Scraper on Apify →](https://apify.com/blackfalcondata/truelancer-scraper?fpr=1h3gvi)**
 
@@ -8,39 +8,40 @@ Extract structured data from [truelancer.com](https://truelancer.com) — truela
 
 ## Key features
 
-**Multiple input modes** — jobs / projects or freelancer profiles or gig services. Switch modes without re-scraping.
+**3 modes in one actor** — `mode: "jobs"` for project listings, `"freelancers"` for talent profiles, or `"services"` for gig packages. Switch with one input parameter; same incremental, compact, and notification features across all three.
 
-**Detail enrichment** — Fetch full job descriptions, structured metadata for each listing.
+**Detail enrichment** (jobs only) — fetch full job descriptions, client stats (jobs posted, money spent, payment verified), proposal counts, deadline, and total views.
 
-**Incremental mode** — Only get new or changed listings since your last run. Content hash per listing — no duplicates, no re-processing.
+**Incremental mode** — recurring runs emit and charge only for items that are new or whose tracked content changed. Detect expired listings, track repost patterns, and pay-per-event scales linearly with your churn rate.
 
-**Change classification** — Track cross-run repost detection across runs. Build audit trails of how listings evolve over time.
+**Notifications** — push results to **Telegram, Discord, Slack, WhatsApp**, or any custom **webhook** (n8n / Make / Zapier / your own backend) after each run. Pair with incremental + `notifyOnlyChanges` to alert only on new or updated items.
 
-**Compact output** — Emit core fields only (AI-agent / MCP-friendly). Keeps response size small for LLM workflows.
+**Compact mode** — AI-agent and MCP-friendly payloads with core fields only. Keeps response size small for LLM workflows and `descriptionMaxLength` lets you cap text length.
 
-**Description truncation** — Cap description length per listing to control output size and cost.
+**Strict client-side filtering** — `jobType`, `categoryId`, `countryCode`, `budgetMin/Max`, `experienceLevel` are enforced after fetch (the source API ignores them server-side, so we filter ourselves — your filters always work).
 
-**Result cap** — Stop after N listings (up to 10.000). Set to 0 for the full catalog.
+**Normalized output** — ISO millisecond timestamps, structured `countryCode` + `countryName` (via `Intl.DisplayNames`), explicit `priceUnit` enum (`"project"` / `"hour"` / `"package"`), HTML entities decoded, experience level mapped to actor's input enum.
 
 **Export anywhere** — Download as JSON, CSV, or Excel. Stream via Apify API, webhooks, or integrations with Make, Zapier, Airbyte, Keboola.
-
-**Structured data** — Every listing returns the same schema with consistent field naming. All fields always present — `null` when unavailable, never omitted.
 
 ---
 
 ## Use cases
 
-**Data pipeline automation**
-Integrate with your ETL pipeline to collect structured listings from truelancer.com on a schedule. Export to CSV, JSON, or directly to your database. Use compact mode to control output size.
+**Lead pipeline for freelancers**
+Run `mode: "jobs"` daily with `incrementalMode + notifyOnlyChanges` and a Telegram or webhook destination. Get push-notifications about new fixed-price React jobs over $500 — straight to your phone or CRM, no manual checking.
 
-**Market research**
-Monitor listings, track trends, and analyze market dynamics with structured, deduplicated data from truelancer.com.
+**Talent sourcing**
+Run `mode: "freelancers"` with `experienceLevel: "expert"` and country/skill filters. Build shortlists ranked by rating, projects completed, and hourly rate. Export to spreadsheets or your ATS.
 
-**Change monitoring**
-Run daily or hourly in incremental mode to capture only new, updated, or expired listings. Perfect for price-tracking, churn analysis, and alerting pipelines.
+**Gig economy market research**
+Run `mode: "services"` to map competitive pricing, niche saturation, and seller performance via `totalSold` and `rating`. Perfect for benchmarking your own services or researching market entry.
+
+**Change monitoring & churn analysis**
+Incremental mode detects new, updated, expired, and reposted listings cross-run. Build audit trails of how the marketplace evolves over time.
 
 **AI / LLM training data**
-Structured JSON per listing is ready for RAG pipelines, embeddings, and agent workflows. Compact mode trims tokens for LLM context windows.
+Structured JSON per record is RAG-ready. Use compact mode + `descriptionMaxLength` to control token usage in agent workflows.
 
 ---
 
@@ -49,9 +50,9 @@ Structured JSON per listing is ready for RAG pipelines, embeddings, and agent wo
 ```json
 {
   "mode": "jobs",
-  "keyword": "web developer",
-  "maxResults": 10,
-  "fetchDetails": false
+  "keyword": "react developer",
+  "maxResults": 25,
+  "fetchDetails": true
 }
 ```
 
@@ -61,110 +62,142 @@ Structured JSON per listing is ready for RAG pipelines, embeddings, and agent wo
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `mode` | enum | `"jobs"` | What to extract: job listings, freelancer profiles, or gig services. |
-| `keyword` | string | — | Search keyword (optional — leave empty to browse all listings). |
-| `categoryId` | integer | — | Filter by Truelancer category ID (e.g. 79 = Virtual Assistant). |
-| `countryCode` | string | — | ISO 2-letter country code filter (e.g. IN, US, GB). |
-| `jobType` | enum | — | Filter by fixed-price or hourly projects (jobs mode only). |
-| `budgetMin` | integer | — | Minimum budget filter in USD (jobs mode only). |
-| `budgetMax` | integer | — | Maximum budget filter in USD (jobs mode only). |
-| `experienceLevel` | enum | — | Filter freelancers by experience level (freelancers mode only). |
-| `sort` | enum | — | Sort order: latest or popular. |
-| `maxResults` | integer | `50` | Maximum number of results to return (0 = unlimited). |
-| `fetchDetails` | boolean | `true` | Fetch job detail page for extra fields: description, client stats, proposal breakdown (jobs mode only). |
-| `descriptionMaxLength` | integer | `0` | Truncate description to N characters. 0 = no truncation. |
-| `compact` | boolean | `false` | Return core fields only — ideal for AI agent / MCP workflows. |
-| `incrementalMode` | boolean | `false` | Compare against previous run and emit only new/changed/expired items. |
-| `stateKey` | string | — | Stable identifier for tracked result universe (required when incrementalMode is true). |
-| `skipReposts` | boolean | `false` | Skip listings whose content matches an expired listing from a prior run. |
+| `mode` | enum | `"jobs"` | `"jobs"` / `"freelancers"` / `"services"` |
+| `keyword` | string | — | Search keyword (optional — empty = browse all) |
+| `categoryId` | integer | — | Truelancer category ID (e.g. 79 = Virtual Assistant) |
+| `countryCode` | string | — | ISO 2-letter country code filter |
+| `jobType` | enum | — | Fixed-price or hourly (jobs mode only) |
+| `budgetMin` / `budgetMax` | integer | — | Budget range in USD (jobs mode only) |
+| `experienceLevel` | enum | — | `entry` / `intermediate` / `expert` (freelancers mode only) |
+| `maxResults` | integer | `50` | Result cap (0 = unlimited, max 10000) |
+| `fetchDetails` | boolean | `true` | Fetch detail pages for richer fields (jobs mode only) |
+| `descriptionMaxLength` | integer | `0` | Truncate description to N chars |
+| `compact` | boolean | `false` | Core fields only (AI-agent / MCP) |
+| `incrementalMode` | boolean | `false` | Emit only new/changed/expired since last run |
+| `stateKey` | string | — | Stable identifier for incremental tracking |
+| `skipReposts` | boolean | `false` | Drop listings matching prior expired content |
+| `telegramToken` + `telegramChatId` | string | — | Push results to a Telegram chat |
+| `discordWebhookUrl` | string | — | Discord embed notifications |
+| `slackWebhookUrl` | string | — | Slack Block Kit notifications |
+| `whatsappAccessToken` + `whatsappPhoneNumberId` + `whatsappTo` | string | — | WhatsApp Cloud API alerts |
+| `webhookUrl` + `webhookHeaders` | string / object | — | Generic JSON webhook (n8n / Make / Zapier) |
+| `notificationLimit` | integer | `5` | Max items per notification (1-20) |
+| `notifyOnlyChanges` | boolean | `false` | Only alert on NEW/UPDATED in incremental mode |
 
 ---
 
 ## Output fields
 
-Every listing returns the same 51-field schema. Missing values are `null` — never omitted.
+Every record returns the same 55-field schema. Mode-specific fields are populated for that mode and `null` for others. Missing values are always `null` — never omitted.
 
-- `description`
-- `category`
-- `skills`
-- `location`
-- `priceValue`
-- `priceCurrency`
-- `priceText`
-- `listingType`
-- `publishedAt`
-- `deadline`
-- `totalProposals`
-- `totalViews`
-- `workHours`
-- `hiringType`
-- `featured`
-- `urgent`
-- `nda`
-- `clientName`
-- `clientLocation`
-- `clientSpent`
-- `clientJobsPosted`
-- `clientPaymentVerified`
-- `entityName`
-- `rating`
-- `totalReviews`
-- `projectsCompleted`
-- `servicesCompleted`
-- `experienceLevel`
-- `lastActive`
-- `isPro`
-- `isPlus`
-- `totalSold`
-- `salePercent`
-- `imageUrl`
-- `sellerName`
-- `sellerUrl`
-- `portalUrl`
-- `contentQuality`
-- `detailFetched`
-- `source`
-- `changeType`
-- `isRepost`
-- `repostOfId`
-- `repostDetectedAt`
-- `listingId`
-- `listingKey`
-- `mode`
-- `title`
-- `url`
-- `searchKeyword`
-- `scrapedAt`
+**Identity & meta** — `listingId`, `listingKey`, `mode`, `title`, `url`, `portalUrl`, `searchKeyword`, `scrapedAt`, `source`, `contentQuality`, `detailFetched`
+
+**Content** — `description`, `category`, `subcategory`, `skills[]`, `location`, `countryCode`, `countryName`, `priceValue`, `priceCurrency`, `priceText`, `priceUnit`, `listingType`, `publishedAt`, `deadline`
+
+**Jobs-specific** — `totalProposals`, `totalViews`, `workHours`, `hiringType`, `featured`, `urgent`, `nda`, `clientName`, `clientLocation`, `clientSpent`, `clientJobsPosted`, `clientPaymentVerified`
+
+**Freelancers-specific** — `entityName`, `rating`, `totalReviews`, `projectsCompleted`, `servicesCompleted`, `experienceLevel`, `lastActive`, `isPro`, `isPlus`
+
+**Services-specific** — `totalSold`, `salePercent`, `imageUrl`, `sellerName`, `sellerUrl`
+
+**Incremental** — `changeType`, `isRepost`, `repostOfId`, `repostDetectedAt`
 
 ---
 
-## Sample output
-
-One object per listing. Here is a real example from a production run:
+## Sample output — jobs mode
 
 ```json
 {
-  "description": "We are looking for a reliable virtual assistant to handle phone answering, billing tasks, and scheduling appointments.The ideal candidate should be organized, professional, and hav…",
-  "category": "Virtual Assistant",
-  "skills": [
-    "Virtual Assistants",
-    "Accountants",
-    "Calendar Management",
-    "Phone Support"
-  ],
-  "location": null,
-  "priceValue": 500,
+  "listingId": "e84c5b21...826577f",
+  "listingKey": "640538",
+  "mode": "jobs",
+  "title": "Experienced Ghost Drama Screenwriter Needed for 110 Page Script",
+  "description": "Seeking an experienced screenwriter to ghostwrite a 110-page drama screenplay…",
+  "category": "Screen & Script Writing",
+  "subcategory": "Screenwriting",
+  "skills": ["Feature Writing", "Screenwriting"],
+  "countryCode": "AU",
+  "countryName": "Australia",
+  "priceValue": 200,
   "priceCurrency": "USD",
-  "priceText": "500 USD",
+  "priceText": "200 USD",
+  "priceUnit": "project",
   "listingType": "Fixed Price",
-  "publishedAt": "2026-04-24T18:15:47.000000Z",
+  "publishedAt": "2026-04-25T09:52:13.000Z",
   "deadline": "2026-05-16",
-  "totalProposals": 10,
-  "totalViews": 85
+  "totalProposals": 7,
+  "totalViews": 79,
+  "hiringType": "immediate",
+  "featured": false,
+  "urgent": false,
+  "nda": false,
+  "clientName": "Mary W",
+  "clientLocation": "Australia",
+  "clientSpent": 0,
+  "clientJobsPosted": 2,
+  "clientPaymentVerified": false,
+  "url": "https://www.truelancer.com/freelance-project/...",
+  "contentQuality": "full",
+  "detailFetched": true,
+  "scrapedAt": "2026-04-25T13:05:36.114Z",
+  "source": "truelancer.com"
 }
 ```
 
-*Truncated — full records contain 51 fields. See Output fields for the complete schema.*
+## Sample output — freelancers mode
+
+```json
+{
+  "listingId": "fb7bdc37...d2b0ec",
+  "listingKey": "babatundeoladepo",
+  "mode": "freelancers",
+  "title": "SEO Content Writer | 8 Years Experience",
+  "entityName": "Babatunde Oladepo",
+  "skills": ["Bloggers", "Content Writers"],
+  "location": "Oko Erin, Nigeria",
+  "countryCode": "NG",
+  "countryName": "Nigeria",
+  "priceValue": 3,
+  "priceCurrency": "USD",
+  "priceText": "3 USD/hr",
+  "priceUnit": "hour",
+  "listingType": "Freelancer",
+  "rating": 5,
+  "totalReviews": 585,
+  "projectsCompleted": 215,
+  "servicesCompleted": 481,
+  "experienceLevel": "expert",
+  "lastActive": "2026-04-25T09:38:33.000Z",
+  "isPro": false,
+  "isPlus": false,
+  "imageUrl": "https://cdn.truelancer.com/user-picture/280787-...jpg",
+  "url": "https://www.truelancer.com/freelancer/babatundeoladepo"
+}
+```
+
+## Sample output — services mode
+
+```json
+{
+  "listingId": "482197d5...4034b",
+  "listingKey": "187577",
+  "mode": "services",
+  "title": "White Hat SEO Link Building Package for Ranking on Google Search",
+  "description": "We provide white hat seo link building SEO packages…",
+  "category": "Internet Marketing",
+  "skills": ["YouTube Experts", "Backlink Building Experts"],
+  "priceValue": 86,
+  "priceCurrency": "USD",
+  "priceText": "86 USD",
+  "priceUnit": "package",
+  "listingType": "Service",
+  "rating": 5,
+  "totalSold": 296,
+  "sellerName": "Jyoti Yadav",
+  "sellerUrl": "https://www.truelancer.com/freelancer/dharmendra",
+  "url": "https://www.truelancer.com/freelance-service/..."
+}
+```
 
 **[Try Truelancer Scraper now — $5 free credit, no credit card →](https://apify.com/blackfalcondata/truelancer-scraper?fpr=1h3gvi)**
 
@@ -175,9 +208,11 @@ One object per listing. Here is a real example from a production run:
 Pay only for what you extract. No subscription required — Apify's free $5 credit covers thousands of results.
 
 | Event | Price (USD) |
-| --- | --- |
-| Actor Start | $0.02 |
+|---|---|
+| Actor Start | $0.01 |
 | Result | $0.002 |
+
+**Example costs:** 10 results = $0.03, 100 results = $0.21, 500 results = $1.01.
 
 See the [actor on Apify](https://apify.com/blackfalcondata/truelancer-scraper?fpr=1h3gvi) for current pricing.
 
@@ -186,33 +221,33 @@ See the [actor on Apify](https://apify.com/blackfalcondata/truelancer-scraper?fp
 ## FAQ
 
 **How do I scrape truelancer.com?**
-Use this actor on Apify to extract structured data from truelancer.com. Configure your search query and filters in the input, then click Start — no coding required.
+Use this actor on Apify. Choose your mode (`jobs` / `freelancers` / `services`), set a keyword and result limit, then click Start. No coding required.
 
 **How do I get truelancer.com data as JSON, CSV, or Excel?**
-The actor writes each listing to Apify's dataset. Download as JSON, CSV, or Excel from the Console, stream via the API, or push to Make, Zapier, Airbyte, or Keboola.
+The actor writes each record to Apify's dataset. Download as JSON, CSV, or Excel from the Console, stream via the API, or push to Make, Zapier, Airbyte, Keboola, or any custom webhook.
+
+**How does incremental mode work?**
+Each record gets a content hash. On subsequent runs, only new or changed records are emitted — saving cost and processing time. Expired and reposted listings are detected automatically.
+
+**Can I get push-notifications when new jobs match my search?**
+Yes. Configure Telegram / Discord / Slack / WhatsApp credentials or a generic webhook URL. Pair with `incrementalMode + notifyOnlyChanges` to alert only on new or updated listings.
 
 **Is it legal to scrape truelancer.com?**
 Web scraping of publicly available data is generally legal. This actor only accesses publicly visible information. Always check truelancer.com's terms of service for your specific use case.
 
-**How much does it cost?**
-Pay-per-event pricing — you only pay for listings extracted. Apify's free $5 credit is enough to run thousands of results before you pay anything.
-
-**How does incremental mode work?**
-Each listing gets a content hash. On subsequent runs, only new or changed listings are emitted — saving time, compute, and storage. Expired listings can be tracked separately.
-
 **Do I need an API key or credentials?**
-No. Just sign up for Apify, paste your input, and click Start. No credit card required.
+No — for the scraping itself, just sign up for Apify and start the actor. Notification platforms (Telegram bot token, Discord webhook URL, etc.) require credentials only if you want to use them.
 
 ---
 
 ## Related products by Black Falcon Data
 
-- [StepStone Scraper](https://apify.com/blackfalcondata/stepstone-scraper?fpr=1h3gvi) — Job listings from 18 European portals
-- [Indeed Job Scraper](https://apify.com/blackfalcondata/indeed-job-scraper?fpr=1h3gvi) — Indeed job listings with salary data
+- [Indeed Job Scraper](https://apify.com/blackfalcondata/indeed-job-scraper?fpr=1h3gvi) — Indeed listings with salary data
 - [Glassdoor Job Scraper](https://apify.com/blackfalcondata/glassdoor-job-scraper?fpr=1h3gvi) — Glassdoor listings with company ratings
-- [Arbeitsagentur Scraper](https://apify.com/blackfalcondata/arbeitsagentur-scraper?fpr=1h3gvi) — Germany's official job portal (1M+ listings)
-- [SEEK Scraper](https://apify.com/blackfalcondata/seek-scraper?fpr=1h3gvi) — Australia & NZ's largest job board
 - [Naukri Scraper](https://apify.com/blackfalcondata/naukri-scraper?fpr=1h3gvi) — India's largest job portal
+- [Naukrigulf Scraper](https://apify.com/blackfalcondata/naukrigulf-scraper?fpr=1h3gvi) — Gulf region job board (UAE/Saudi/Qatar)
+- [Wellfound Scraper](https://apify.com/blackfalcondata/wellfound-scraper?fpr=1h3gvi) — Startup jobs and talent
+- [Upwork Scraper](https://apify.com/blackfalcondata/upwork-scraper?fpr=1h3gvi) — Adjacent freelance marketplace
 
 ---
 
@@ -234,4 +269,4 @@ Black Falcon Data builds production-grade web scrapers for job boards and market
 
 ---
 
-*Last updated: 2026 04*
+*Last updated: 2026-04-25*
